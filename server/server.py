@@ -1,6 +1,6 @@
 from flask import Flask, request, jsonify
 import sqlite3
-from datetime import datetime
+from datetime import datetime, timedelta, date
 
 app = Flask(__name__)
 DATABASE = 'data.db'
@@ -71,7 +71,8 @@ def get_numbers():
     try:
         conn = get_db()
         cursor = conn.cursor()
-        cursor.execute('SELECT * FROM numbers ORDER BY timestamp DESC')
+        today = date.today() - timedelta(days=1)
+        cursor.execute(f"SELECT * FROM numbers WHERE timestamp > {today.isoformat()} ORDER BY timestamp DESC")
         rows = cursor.fetchall()
         conn.close()
         
