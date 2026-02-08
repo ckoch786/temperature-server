@@ -16,39 +16,68 @@ def init_db():
     conn = get_db()
     cursor = conn.cursor()
     cursor.execute('''
-        CREATE TABLE IF NOT EXISTS numbers (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            value INTEGER NOT NULL,
-            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
-        )
+            CREATE TABLE IF NOT EXISTS weather (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                temperature REAL NOT NULL,
+                humidity REAL NOT NULL,
+                device INTEGER NOT NULL,
+                timestamp TEXT
+            )
+    ''')
+    cursor.execute('''
+            CREATE TABLE IF NOT EXISTS device (
+                id	INTEGER PRIMARY KEY AUTOINCREMENT,
+         	    name	TEXT NOT NULL
+            );
+    ''')
+
+    cursor.execute('''
+            INSERT INTO device (name)
+                   SELECT 'Office'
+                   WHERE NOT EXISTS(
+                   SELECT 1 FROM device WHERE name = 'Office')
     ''')
     conn.commit()
     conn.close()
-    print(f"Database initialized: {DATABASE}")
+    app.logger.info(f"Database initialized: {DATABASE}")
+
+# Ensure DB/table exist when module is imported (e.g. under gunicorn/systemd)
+try:
+    init_db()
+except Exception as _e:
+    app.logger.error("init_db on import failed: %s", _e)
 
 @app.route('/')
 def hello_world():
     return '<p>Hello, World!</p>'
 
-@app.route('/number', methods=['POST'])
-def add_number():
+@app.route('/weather', methods=['POST'])
+def add_weather_data():
     """Handle POST request with a number in the body"""
     try:
-        # Get the data from request body
-        data = request.get_json()
-        
-        # Handle both JSON and plain text
-        if data is not None and 'number' in data:
-            number = int(data['number'])
-        elif request.data:
-            number = int(request.data.decode('utf-8'))
-        else:
-            return jsonify({'error': 'No number provided'}), 400
+        # Get the data from request body (expect JSON with temperature & humidity)
+        data = request.get_json(silent=True)
+
+        if data is None or 'temperature' not in data or 'humidity' not in data:
+            return jsonify({'error': 'Missing temperature or humidity in JSON body'}), 400
+
+        try:
+            temperature = float(data['temperature'])
+            humidity = float(data['humidity'])
+            device = int(data['device'])
+        except (ValueError, TypeError):
+            return jsonify({'error': 'Invalid temperature or humidity format'}), 400
+
+        timestamp = datetime.now().isoformat()
+        app.logger.info(timestamp)
         
         # Insert into database
         conn = get_db()
         cursor = conn.cursor()
-        cursor.execute('INSERT INTO numbers (value) VALUES (?)', (number,))
+        cursor.execute('''
+            INSERT INTO weather (temperature, humidity, device, timestamp)
+            VALUES (?, ?, ?, ?)
+        ''', (temperature, humidity, device, timestamp))
         conn.commit()
         record_id = cursor.lastrowid
         conn.close()
@@ -56,8 +85,10 @@ def add_number():
         return jsonify({
             'success': True,
             'id': record_id,
-            'number': number,
-            'message': f'Number {number} saved successfully'
+            'temperature': temperature,
+            'humidity': humidity,
+            'device': device,
+            'timestamp': timestamp,
         }), 201
         
     except ValueError:
@@ -65,75 +96,99 @@ def add_number():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-@app.route('/numbers', methods=['GET'])
+@app.route('/weather', methods=['GET'])
 def get_numbers():
     """Get all numbers from the database"""
+
+    query = request.args.get('details')
     try:
         conn = get_db()
         cursor = conn.cursor()
-        today = date.today() - timedelta(days=1)
-        cursor.execute(f"SELECT * FROM numbers WHERE timestamp > {today.isoformat()} ORDER BY timestamp DESC")
+        today = datetime.now() - timedelta(days=1)
+        cursor.execute('''
+                       SELECT
+                            w.id,
+                            w.temperature,
+                            w.humidity,
+                            d.name,
+                            w.timestamp
+                       FROM 
+                            weather as w
+                       JOIN 
+                            device as d
+                       ON 
+                            d.id = w.device
+                       WHERE 
+                            w.timestamp > ? 
+                       ORDER BY w.timestamp DESC
+                       ''', (today.isoformat(),))
         rows = cursor.fetchall()
         conn.close()
         
-        numbers = []
+        weather_data = []
         for row in rows:
-            if row['value'] > 0:
-                numbers.append({
-                    'id': row['id'],
-                    'value': row['value'],
-                    'timestamp': row['timestamp']
-                })
+            weather_data.append({
+                'id': row['id'],
+                'temperature': row['temperature'],
+                'humidity': row['humidity'],
+                'device': row['name'],
+                'timestamp': row['timestamp']
+            })
         
         # return jsonify({
-        #     'count': len(numbers),
-        #     'numbers': numbers
+        #     'count': len(weather_data),
+        #     'weather_data': weather_data
         # }), 200
-        # return """
-        # <h1>Test</h1>
-        # <p>This is a test page.</p>
-        # <ul>
-        # """ + "".join([f"<li>ID: {num['id']}, Value: {num['value']}, Timestamp: {num['timestamp']}</li>" for num in numbers]) + """
-        # </ul>
+        if query != None:
+            return """
+                <h1>Weather Data</h1>
+                <p>Temperature and Humidity data:</p>
+                <ul>
+                """ + "".join([f"<li>ID: {data['id']}, Temperature: {data['temperature']}, Humidity: {data['humidity']}, Device: {data['device']}, Timestamp: {data['timestamp']}</li>" for data in weather_data]) + """
+                </ul>
 
-        # """, 200
-        return """
-        <!DOCTYPE html>
-<html>
-<script src="https://www.gstatic.com/charts/loader.js"></script>
-<body>
-<div id="myChart" style="width:100%; max-width:600px; height:500px;"></div>
+                """, 200
+        else:
+            return """
+            <!DOCTYPE html>
+    <html>
+    <script src="https://www.gstatic.com/charts/loader.js"></script>
+    <body>
+    <div id="myChart" style="width:100%; max-width:600px; height:500px;"></div>
 
-<script>
-google.charts.load('current',{packages:['corechart']});
-google.charts.setOnLoadCallback(drawChart);
+    <script>
+    google.charts.load('current',{packages:['corechart']});
+    google.charts.setOnLoadCallback(drawChart);
 
-function drawChart() {
+    function drawChart() {
 
-// Set Data
-const data = google.visualization.arrayToDataTable([
-    ['Time', 'Temperature'],
-""" + "".join([f"  [new Date(new Date('{num['timestamp']}').getTime() - 5*60*60*1000), {num['value']}],\n" for num in numbers]) + """
-]);
+    // Set Data
+        // Create typed DataTable so first column is Date and second is Number
+        const data = new google.visualization.DataTable();
+        data.addColumn('datetime', 'Time');
+        data.addColumn('number', 'Temperature');
+        data.addRows([
+    """ + "".join([f"  [new Date('{wdata['timestamp']}'), {wdata['temperature']}],\n" for wdata in weather_data]) + """
+        ]);
 
-// Set Options
-const options = {
-  title: 'Temperature vs Time',
-  hAxis: {title: 'Time in Seconds'},
-  vAxis: {title: 'Temperature in Fahrenheit'},
-  legend: 'none'    
-};
+    // Set Options
+    const options = {
+    title: 'Temperature vs Time',
+    hAxis: {title: 'Time in minutes'},
+    vAxis: {title: 'Temperature in Fahrenheit'},
+    legend: 'none'    
+    };
 
-// Draw
-const chart = new google.visualization.LineChart(document.getElementById('myChart'));
-chart.draw(data, options);
+    // Draw
+    const chart = new google.visualization.LineChart(document.getElementById('myChart'));
+    chart.draw(data, options);
 
-}
-</script>
+    }
+    </script>
 
-</body>
-</html>
-        """, 200
+    </body>
+    </html>
+            """, 200
 
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -185,3 +240,9 @@ def delete_number(number_id):
 if __name__ == '__main__':
     init_db()
     app.run(host='0.0.0.0', port=5000, debug=True)
+
+    # Ensure DB/table exist when module is imported (e.g. under gunicorn/systemd)
+    try:
+        init_db()
+    except Exception as _e:
+        app.logger.error("init_db on import failed:", _e)
