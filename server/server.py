@@ -1,9 +1,17 @@
 from flask import Flask, request, jsonify
+from flask_compress import Compress
+
+import logging
 import sqlite3
 from datetime import datetime, timedelta, date
 
 app = Flask(__name__)
+Compress(app)
 DATABASE = 'data.db'
+
+logging.basicConfig(level=logging.DEBUG)
+app.logger.setLevel(logging.DEBUG)
+
 
 def get_db():
     """Get database connection"""
@@ -21,9 +29,12 @@ def init_db():
                 temperature REAL NOT NULL,
                 humidity REAL NOT NULL,
                 device INTEGER NOT NULL,
-                timestamp TEXT
+                timestamp TEXT NOT NULL
             )
     ''')
+
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_device_timestamp ON weather(device, timestamp)')
+    
     cursor.execute('''
             CREATE TABLE IF NOT EXISTS device (
                 id	INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -97,7 +108,7 @@ def add_weather_data():
         return jsonify({'error': str(e)}), 500
 
 @app.route('/weather', methods=['GET'])
-def get_numbers():
+def get_weather():
     """Get all numbers from the database"""
 
     query = request.args.get('details')

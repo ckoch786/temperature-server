@@ -7,7 +7,7 @@ User=ckoch
 Group=ckoch
 WorkingDirectory=/home/ckoch/temperature-server
 Environment="PATH=/home/ckoch/temperature-server/.venv/bin"
-ExecStart=/home/ckoch/temperature-server/.venv/bin/gunicorn server.server:app --bind 0.0.0.0:5000 --workers 4 --access-logfile - --error-logfile -
+ExecStart=/home/ckoch/temperature-server/.venv/bin/gunicorn server.server:app --timeout 120 --bind 0.0.0.0:5000 --workers 4 --access-logfile - --error-logfile -
 Restart=always
 RestartSec=3
 

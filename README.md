@@ -20,3 +20,18 @@ sudo journalctl -u gunicorn -f
 
 # cp service file to
 /etc/systemd/system/
+
+
+# For raspberry pi
+- To disable the desktop and windows manager:
+``` shell
+    sudo systemctl set-default multi-user.target
+```
+
+- To re-enable
+``` shell
+    sudo systemctl set-default graphical.target
+```
+
+
+For both reboot for it to take effect
