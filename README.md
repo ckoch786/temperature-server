@@ -35,3 +35,15 @@ sudo journalctl -u gunicorn -f
 
 
 For both reboot for it to take effect
+
+
+
+
+
+# Using Pipenv
+
+* Install packages: ```pipenv install package_name```
+* Install dev dependencies: ```pipenv install --dev pytest```
+* Activate the virtual environment: ```pipenv shell```
+* Run commands without activating: ```pipenv run python script.py```
+* Install from Pipfile: ```pipenv install``` (useful for teammates)

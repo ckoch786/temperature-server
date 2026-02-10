@@ -161,44 +161,137 @@ def get_weather():
                 """, 200
         else:
             return """
-            <!DOCTYPE html>
-    <html>
-    <script src="https://www.gstatic.com/charts/loader.js"></script>
-    <body>
-    <div id="myChart" style="width:100%; max-width:600px; height:500px;"></div>
+<!DOCTYPE html>
+<html>
+<script src="https://www.gstatic.com/charts/loader.js"></script>
+<body>
+<div style="max-width:800px; margin: 20px auto;">
+    <div style="margin-bottom: 20px;">
+        <label for="startDate">Start Date: </label>
+        <input type="datetime-local" id="startDate" style="margin-right: 20px;">
+        
+        <label for="endDate">End Date: </label>
+        <input type="datetime-local" id="endDate" style="margin-right: 20px;">
+        
+        <button onclick="updateChart()" style="padding: 5px 15px;">Update Chart</button>
+        <button onclick="resetChart()" style="padding: 5px 15px;">Reset</button>
+    </div>
+    
+    <div id="myChart" style="width:100%; height:500px;"></div>
+</div>
 
-    <script>
-    google.charts.load('current',{packages:['corechart']});
-    google.charts.setOnLoadCallback(drawChart);
+<script>
+google.charts.load('current',{packages:['corechart']});
+google.charts.setOnLoadCallback(initChart);
 
-    function drawChart() {
+let fullData;
+let chart;
 
-    // Set Data
-        // Create typed DataTable so first column is Date and second is Number
-        const data = new google.visualization.DataTable();
-        data.addColumn('datetime', 'Time');
-        data.addColumn('number', 'Temperature');
-        data.addRows([
-    """ + "".join([f"  [new Date('{wdata['timestamp']}'), {wdata['temperature']}],\n" for wdata in weather_data]) + """
-        ]);
+function initChart() {
+    // Store full dataset
+    fullData = new google.visualization.DataTable();
+    fullData.addColumn('datetime', 'Time');
+    fullData.addColumn('number', 'Temperature');
+    fullData.addRows([
+""" + "".join([f"        [new Date('{wdata['timestamp']}'), {wdata['temperature']}],\n" for wdata in weather_data]) + """
+    ]);
+    
+    // Initialize date inputs with data range
+    setDefaultDateRange();
+    
+    // Create chart
+    chart = new google.visualization.LineChart(document.getElementById('myChart'));
+    
+    // Draw initial chart
+    drawChart(fullData);
+}
 
-    // Set Options
-    const options = {
-    title: 'Temperature vs Time',
-    hAxis: {title: 'Time in minutes'},
-    vAxis: {title: 'Temperature in Fahrenheit'},
-    legend: 'none'    
-    };
-
-    // Draw
-    const chart = new google.visualization.LineChart(document.getElementById('myChart'));
-    chart.draw(data, options);
-
+function setDefaultDateRange() {
+    if (fullData.getNumberOfRows() === 0) return;
+    
+    // Get min and max dates from data
+    let minDate = fullData.getValue(0, 0);
+    let maxDate = fullData.getValue(0, 0);
+    
+    for (let i = 1; i < fullData.getNumberOfRows(); i++) {
+        let date = fullData.getValue(i, 0);
+        if (date < minDate) minDate = date;
+        if (date > maxDate) maxDate = date;
     }
-    </script>
+    
+    // Set input values
+    document.getElementById('startDate').value = formatDateTimeLocal(minDate);
+    document.getElementById('endDate').value = formatDateTimeLocal(maxDate);
+}
 
-    </body>
-    </html>
+function formatDateTimeLocal(date) {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    const hours = String(date.getHours()).padStart(2, '0');
+    const minutes = String(date.getMinutes()).padStart(2, '0');
+    return `${year}-${month}-${day}T${hours}:${minutes}`;
+}
+
+function updateChart() {
+    const startDateInput = document.getElementById('startDate').value;
+    const endDateInput = document.getElementById('endDate').value;
+    
+    if (!startDateInput || !endDateInput) {
+        alert('Please select both start and end dates');
+        return;
+    }
+    
+    const startDate = new Date(startDateInput);
+    const endDate = new Date(endDateInput);
+    
+    if (startDate > endDate) {
+        alert('Start date must be before end date');
+        return;
+    }
+    
+    // Filter data based on date range
+    const filteredData = new google.visualization.DataTable();
+    filteredData.addColumn('datetime', 'Time');
+    filteredData.addColumn('number', 'Temperature');
+    
+    for (let i = 0; i < fullData.getNumberOfRows(); i++) {
+        const date = fullData.getValue(i, 0);
+        const temp = fullData.getValue(i, 1);
+        
+        if (date >= startDate && date <= endDate) {
+            filteredData.addRow([date, temp]);
+        }
+    }
+    
+    if (filteredData.getNumberOfRows() === 0) {
+        alert('No data found in selected date range');
+        return;
+    }
+    
+    drawChart(filteredData);
+}
+
+function resetChart() {
+    setDefaultDateRange();
+    drawChart(fullData);
+}
+
+function drawChart(data) {
+    const options = {
+        title: 'Temperature vs Time',
+        hAxis: {title: 'Time'},
+        vAxis: {title: 'Temperature in Fahrenheit'},
+        legend: 'none',
+        chartArea: {width: '80%', height: '70%'}
+    };
+    
+    chart.draw(data, options);
+}
+</script>
+
+</body>
+</html>
             """, 200
 
     except Exception as e:
