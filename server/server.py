@@ -48,6 +48,18 @@ def init_db():
                    WHERE NOT EXISTS(
                    SELECT 1 FROM device WHERE name = 'Office')
     ''')
+    cursor.execute('''
+            INSERT INTO device (name)
+                   SELECT 'Garage'
+                   WHERE NOT EXISTS(
+                   SELECT 1 FROM device WHERE name = 'Garage')
+    ''')
+    cursor.execute('''
+            INSERT INTO device (name)
+                   SELECT 'Outdoors'
+                   WHERE NOT EXISTS(
+                   SELECT 1 FROM device WHERE name = 'Outdoors')
+    ''')
     conn.commit()
     conn.close()
     app.logger.info(f"Database initialized: {DATABASE}")
@@ -64,7 +76,7 @@ def hello_world():
 
 @app.route('/weather', methods=['POST'])
 def add_weather_data():
-    """Handle POST request with a number in the body"""
+    """Handle POST request with weather data in the body"""
     try:
         # Get the data from request body (expect JSON with temperature & humidity)
         data = request.get_json(silent=True)
